@@ -8,5 +8,5 @@ Knowledge Document Management System of the Korean National Police Agency
 
 ## License
 
-- BSD, 한컴, 쿠쿠닥스, Pdf-reader, opendraft
+- BSD-3, 한컴, 쿠쿠닥스, Pdf-reader, opendraft
 
