@@ -1,12 +1,21 @@
-# KDMS
-Knowledge Document Management System of the Korean National Police Agency
+# Project outline
+- Document search and searchable system
 
-## Overview
-비정형 DB 기반의 지능형 문서 관리 시스템 입니다.
 
-- hwp, pdf, doc 
+## Project purpose description
+- Upload a specific document, you can search, edit and download the document.
 
-## License
+## How to start (use) a project
+- Need 'Opendraft' development solution. It is currently a commercial license, but will be released in a future trial version.
 
-- BSD-3, 한컴, 쿠쿠닥스, Pdf-reader, opendraft
+## Project development method
+- After running the 'Open Draft' solution, you can load the source code from the solution and proceed with the development.
 
+## Project License
+- KDMS (BSD-3), PDF-READER (Apache 2.0)
+
+## How to join the project
+- Need to trial version of the development tool
+
+## Questions?
+- Link coming soon
