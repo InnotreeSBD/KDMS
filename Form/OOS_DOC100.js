@@ -1,4 +1,5 @@
 var search_engine = "";
+var pdf_file_name = "";
 
 function Form_Load(  )
 {
@@ -218,7 +219,7 @@ function WShtAC_1_OnToolbarClick( btn_id )
     }
     else if(btn_id == "move")
     {
-        Form.ConfirmAsync("confirm_down_file", "원본 문서를 다운로드 하시겠읍니까 ?", "다운로드 확인");
+        Form.ShowDialog("OOS_DOC130");
     }
 }
 
@@ -246,16 +247,62 @@ function Form_OnCloseDialog( view_code, dialog_result )
         WShtAC_1.SetGridCellText("FileName", cur_row, Form.DialogParamGet("FileName"))
         WShtAC_1.SetGridCellText("ApDt", cur_row, Form.DialogParamGet("ApDt"))
         WShtAC_1.SetGridCellText("HrNm", cur_row, Form.DialogParamGet("HrNm"))
-//        WShtAC_1.SetGridCellText("ApUserID", cur_row, Form.DialogParamGet("ApUserID"))
         WShtAC_1.SetGridCellText("Hash_Code", cur_row, Form.DialogParamGet("Hash_Code"))
         WShtAC_1.SetGridCellText("FileCategory", cur_row, Form.DialogParamGet("FileCategory"))
         WShtAC_1.ModifySet(cur_row, 0);
         TRE_1_OnSelectChanged(TRE_1.CurrentNodeKey());
     }
-    else if(view_code == "DtaQ_Doc_Select")
+    else if(view_code == "OOS_DOC130")
     {
-        disp_search_result(WShtAC_1.GetCurrentRow(), Form.DialogParamGet("doc_hash_code"));
-    
+        var plcy_id = WShtAC_1.GetGridCellText("plcy_id", WShtAC_1.GetCurrentRow());
+        var Hash_Code = WShtAC_1.GetGridCellText("Hash_Code", WShtAC_1.GetCurrentRow());
+        ODW_2.ResetODW();
+        ODW_2.SetParam("cntr_id", 0, Form.DialogParamGet("cntr_id"));
+        ODW_2.SetParam("FileCategory", 0, Form.DialogParamGet("file_category"));
+        ODW_2.SetParam("plcy_id", 0, plcy_id);
+        if (! ODW_2.Update("ECMCntrPolicy_update_rn"))
+        {
+            Form.Alert( ODW_2.GetError() );
+            return; 
+        }
+
+        ODW_3.ResetODW(); // HwpXMLRead
+        ODW_3.SetParam("hash", 0, Hash_Code);
+        ODW_3.SetParam("key_name", 0, "meta");
+        ODW_3.Query("hget_data");
+        var ret_val = ODW_3.GetParam("json_result", 0);
+        if(ret_val == "")
+        	return;
+        meta = JSON.parse(ret_val);
+
+	    ODW_5.ResetODW();
+	    ODW_5.SetParam("No", 0, meta["doc_id"]);
+	    ODW_5.Delete("delete");
+
+        ODW_3.ResetODW(); // HwpXMLRead
+        ODW_3.SetParam("hash", 0, Hash_Code);
+        ODW_3.SetParam("key_name", 0, "Contents_data");
+        ODW_3.Query("hget_data");
+        var ret_val = ODW_3.GetParam("json_result", 0);
+        if(ret_val == "")
+        	return;
+        ret_val = JSON.parse(ret_val);
+
+	    ODW_5.ResetODW(); 
+	    ODW_5.SetParam("Filename", 0, meta["file_name_src"]);
+	    ODW_5.SetParam("Body", 0, ret_val.field_data.join("\n"));
+	    ODW_5.SetParam("Created", 0, meta["reg_date"]);
+	    ODW_5.SetParam("hash_code", 0, Hash_Code);
+	    ODW_5.SetParam("Title", 0, meta["title"]);
+	    ODW_5.SetParam("Author", 0, meta["reg_nm"]);
+	    ODW_5.SetParam("Category", 0, Form.DialogParamGet("file_category"));
+	    if( ! ODW_5.Insert("collect") )
+	    {
+        	Form.Alert( ODW_5.GetError() );
+        	return; 
+    	}
+        
+       TRE_1_OnSelectChanged(TRE_1.CurrentNodeKey());
     }
 }
 
@@ -268,6 +315,8 @@ function WShtAC_1_OnButtonDown( panel_name, ctrl_name )
     }
 }
 
+var old_hash_code = "";
+
 function WShtAC_1_OnSelectChanged( col_name, col, row )
 {
     if(WShtAC_1.GetCurrentRow() == -1)
@@ -275,11 +324,44 @@ function WShtAC_1_OnSelectChanged( col_name, col, row )
     var Hash_Code = WShtAC_1.GetGridCellText("Hash_Code", WShtAC_1.GetCurrentRow());
     if(Hash_Code == "")
         return;
+    if(check_pdf(row))
+    {
+    	if(old_hash_code != "")
+    	{
+	        ODW_3.ResetODW();
+	        ODW_3.SetParam("hash", 0, old_hash_code);
+	        ODW_3.Delete("del_file");
+    	}
+        ODW_3.ResetODW();
+        ODW_3.SetParam("hash", 0, Hash_Code);
+        ODW_3.Insert("down_file");
+    	var File_Name = ODW_3.GetParam("json_result", 0);
+        
+        pdf_file_name = "/ODS_Storage/" + File_Name;
+        MAP_1.SetMapURL("/od_oos/pdfjs/web/viewer.html");
+        disp_outer_text(Hash_Code);
+        old_hash_code = Hash_Code;
+	    return;
+    }
     if(check_exist(Hash_Code))
     {
         show_preview(Hash_Code);
         disp_outer_text(Hash_Code);
     }
+    else
+    {
+	    TXT_1.SetText("");
+    	MAP_1.SetMapURL("");
+    }
+}
+
+function check_pdf(row)
+{
+    var FileName = WShtAC_1.GetGridCellText("FileName", row);
+	var FileArr = FileName.split(".");
+	if(FileArr[FileArr.length - 1].toUpperCase() == "PDF")
+		return true;
+	return false;
 }
 
 function show_preview(Hash_Code)
@@ -299,7 +381,12 @@ function show_preview(Hash_Code)
         return;
     }
     data_src = JSON.parse(data_src);
-    MAP_1.SetMapURL("http://localhost:8080/hermes/resource/store/" + data_src["Preview_Html"]);
+    ODW_7.ResetODW(); // HwpXMLRead
+    ODW_7.Query("get_hwp_ip");
+    var server_ip = ODW_7.GetParam("http_result", 0);
+    var server_port = ODW_7.GetParam("http_result", 1);
+    var server_service = ODW_7.GetParam("http_result", 2);
+	MAP_1.SetMapURL("http://"+server_ip+":"+server_port+server_service + data_src["Preview_Html"]);
 }
 
 function disp_outer_text( Hash_Code)
@@ -325,7 +412,16 @@ function disp_outer_text( Hash_Code)
 
 function WShtAC_1_OnQueryEnd( result, row_count )
 {
-    WShtAC_1.SortColumn("ApDt", false);
+	if(row_count == 0)
+	{
+	    TXT_1.SetText("");
+    	MAP_1.SetMapURL("");
+	
+	}
+	else
+	{
+	    WShtAC_1.SortColumn("ApDt", false);
+    }
 }
 
 function Form_OnConfirmResult( confirm_id, result )
@@ -367,7 +463,11 @@ function Form_OnConfirmResult( confirm_id, result )
         ODW_3.SetParam("hash", 0, Hash_Code);
         ODW_3.SetParam("key_name", 0, "meta");
         ODW_3.Query("hget_data");
-        var ret_val = JSON.parse(ODW_3.GetParam("json_result", 0));
+        var ret_val = ODW_3.GetParam("json_result", 0);
+        if(ret_val == "")
+        	return;
+        ret_val = JSON.parse(ret_val);
+        var doc_id = ret_val["doc_id"];
 
         ODW_3.ResetODW(); // HwpXMLRead
         ODW_3.SetParam("hash", 0, Hash_Code);
@@ -403,7 +503,7 @@ function Form_OnConfirmResult( confirm_id, result )
 	    }
 	    else if(search_engine == "doub")
 	    {
-	        var doc_id = ret_val["doc_id"];
+//	        var doc_id = ret_val["doc_id"];
 	        ODW_5.ResetODW();
 	        ODW_5.SetParam("No", 0, doc_id);
 	        ODW_5.Delete("delete");
@@ -433,33 +533,8 @@ function WShtAC_1_OnMenuPrepare( menu )
     var menu_row = menu.GetMenuRow();
 
     menu.ClearMenuItem();
-    menu.AddMenuItem("Menu0", "문서 비교");
-//    menu.AddMenuItem("Menu2", "문서 다운로드");
     Form.SetViewData( "menu_col_name", menu_col_name );
     Form.SetViewData( "menu_row", menu_row );    
-}
-
-function WShtAC_1_OnMenuClick(menu_code, menu_label, col_name, col, row, cell_val)
-{
-    switch(menu_code)
-    {
-        case "Menu0" :
-            Form.DialogParamSet("Doc_Type", "Data");
-            Form.DialogParamSet("WType", "Sheet_2");
-            Form.DialogParamSet("Category", "Storage");
-            Form.ShowDialog("OOS_Doc_Select");
-            break;
-    }
-}
-
-function disp_search_result(row, trow)
-//
-// Purpose : 문서 내용 비교를 위한 2개의 Hash Code를 "DIFF_VIEW3" Form에 전달
-//
-{
-	Form.DialogParamSet("Source_Hash", WShtAC_1.GetGridCellText("Hash_Code", row));
-	Form.DialogParamSet("Target_Hash", trow);
-    Form.ShowDialog("OOS_DIFF_VIEW3");
 }
 
 function check_exist(Hash_Code)
